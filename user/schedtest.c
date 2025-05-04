@@ -16,7 +16,7 @@ main(int argc, char *argv[])
 {
   int n, pid;
   for(n=0; n<N; n++){
-    pid = fork();
+    pid = fork(n % 4);
     if(pid == 0) {
       waste_time();
       exit(0);
