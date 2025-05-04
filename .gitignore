@@ -10,9 +10,7 @@ kernel/kernel
 mkfs/mkfs
 user/_cat
 user/_echo
-user/_forktest
 user/_grep
-user/_grind
 user/_init
 user/_kill
 user/_ln
@@ -21,8 +19,6 @@ user/_mkdir
 user/_rm
 user/_schedtest
 user/_sh
-user/_stressfs
-user/_usertests
 user/_wc
 user/_zombie
 user/initcode

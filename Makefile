@@ -107,12 +107,6 @@ $U/usys.S : $U/usys.pl
 $U/usys.o : $U/usys.S
 	$(CC) $(CFLAGS) -c -o $U/usys.o $U/usys.S
 
-$U/_forktest: $U/forktest.o $(ULIB)
-	# forktest has less library code linked in - needs to be small
-	# in order to be able to max out the proc table.
-	$(LD) $(LDFLAGS) -N -e main -Ttext 0 -o $U/_forktest $U/forktest.o $U/ulib.o $U/usys.o
-	$(OBJDUMP) -S $U/_forktest > $U/forktest.asm
-
 $U/_schedtest: $U/schedtest.o $(ULIB)
 	# schedtest has less library code linked in - needs to be small
 	# in order to be able to max out the proc table.
@@ -131,7 +125,6 @@ mkfs/mkfs: mkfs/mkfs.c $K/fs.h $K/param.h
 UPROGS=\
 	$U/_cat\
 	$U/_echo\
-	$U/_forktest\
 	$U/_schedtest\
 	$U/_grep\
 	$U/_init\
@@ -141,9 +134,6 @@ UPROGS=\
 	$U/_mkdir\
 	$U/_rm\
 	$U/_sh\
-	$U/_stressfs\
-	$U/_usertests\
-	$U/_grind\
 	$U/_wc\
 	$U/_zombie\
 
