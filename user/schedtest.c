@@ -22,14 +22,14 @@ main(int argc, char *argv[])
       exit(0);
     }
     else {
-      printf("started child %d\n", pid);
+      printf("started child %d with priority %d\n", pid, n % 4);
       child[n] = pid;
     }
   }
 
   for(n=0; n<N; n++){
     pid = wait(0);  
-    printf("Child pid = %d finished!\n", pid);
+    printf("Child pid = %d finished with priority %d!\n", pid, n % 4);
   }
 
   exit(0);

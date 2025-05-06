@@ -277,13 +277,11 @@ growproc(int n)
 // Create a new process, copying the parent.
 // Sets up child kernel stack to return as if from fork() system call.
 int
-fork(int class)
+fork(int priority_class)
 {
   int i, pid;
   struct proc *np;
   struct proc *p = myproc();
-
-  printf("---%d---", class);
 
   // Allocate process.
   if((np = allocproc()) == 0){
@@ -318,6 +316,7 @@ fork(int class)
 
   acquire(&wait_lock);
   np->parent = p;
+  np->priority_class = priority_class;
   release(&wait_lock);
 
   acquire(&np->lock);
@@ -436,6 +435,26 @@ wait(uint64 addr)
   }
 }
 
+// Generate a random number between 0 and max (inclusive)
+int
+random_at_most(int max) {
+  static unsigned long seed = 1;
+  seed = seed * 1664525 + 1013904223;
+  return (int)((seed >> 16) % (max + 1));
+}
+
+// Get the number of tickets for a given priority class
+int
+get_tickets(int priority_class) {
+  switch(priority_class) {
+    case 0: return 6;
+    case 1: return 3;
+    case 2: return 2;
+    case 3: return 1;
+    default: return 1;
+  }
+}
+
 // Per-CPU process scheduler.
 // Each CPU calls scheduler() after setting itself up.
 // Scheduler never returns.  It loops, doing:
@@ -449,6 +468,10 @@ scheduler(void)
   struct proc *p;
   struct cpu *c = mycpu();
 
+  int total_tickets;
+  int winning_ticket;
+  int current_ticket;
+
   c->proc = 0;
   for(;;){
     // The most recent process to run may have had interrupts
@@ -456,25 +479,52 @@ scheduler(void)
     // processes are waiting.
     intr_on();
 
-    int found = 0;
-    for(p = proc; p < &proc[NPROC]; p++) {
-      acquire(&p->lock);
-      if(p->state == RUNNABLE) {
-        // Switch to chosen process.  It is the process's job
-        // to release its lock and then reacquire it
-        // before jumping back to us.
-        p->state = RUNNING;
-        c->proc = p;
-        swtch(&c->context, &p->context);
+    total_tickets = 0;
 
-        // Process is done running for now.
-        // It should have changed its p->state before coming back.
-        c->proc = 0;
-        found = 1;
+    // Calculate the total number of tickets
+    for(p = proc; p < &proc[NPROC]; p++) {
+      if(p->state == RUNNABLE) {
+        acquire(&p->lock);
+        total_tickets += get_tickets(p->priority_class);
+        release(&p->lock);
       }
-      release(&p->lock);
     }
-    if(found == 0) {
+
+    // If there are tickets, choose a process
+    if(total_tickets > 0) {
+      // Generate a random number between 0 and total_tickets - 1
+      winning_ticket = random_at_most(total_tickets - 1);
+      current_ticket = 0;
+
+      // Iterate through all processes
+      for(p = proc; p < &proc[NPROC]; p++) {
+        acquire(&p->lock);
+        if(p->state == RUNNABLE) {
+          // Add the number of tickets for this process to the current ticket count
+          current_ticket += get_tickets(p->priority_class);
+
+          // If the current ticket count is greater than or equal to the winning ticket,
+          // switch to this process
+          if(current_ticket >= winning_ticket) {
+            // Switch to chosen process.  It is the process's job
+            // to release its lock and then reacquire it
+            // before jumping back to us.
+            p->state = RUNNING;
+            c->proc = p;
+            swtch(&c->context, &p->context);
+
+            // Process is done running for now.
+            // It should have changed its p->state before coming back.
+            c->proc = 0;
+            release(&p->lock);
+
+            // Break out of the loop
+            break;
+          }
+        }
+        release(&p->lock);
+      }
+    } else {
       // nothing to run; stop running on this core until an interrupt.
       intr_on();
       asm volatile("wfi");

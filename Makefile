@@ -65,6 +65,7 @@ CFLAGS += -fno-builtin-strncpy -fno-builtin-strncmp -fno-builtin-strlen -fno-bui
 CFLAGS += -fno-builtin-memmove -fno-builtin-memcmp -fno-builtin-log -fno-builtin-bzero
 CFLAGS += -fno-builtin-strchr -fno-builtin-exit -fno-builtin-malloc -fno-builtin-putc
 CFLAGS += -fno-builtin-free
+CFLAGS += -fno-builtin-fork
 CFLAGS += -fno-builtin-memcpy -Wno-main
 CFLAGS += -fno-builtin-printf -fno-builtin-fprintf -fno-builtin-vprintf
 CFLAGS += -I.
