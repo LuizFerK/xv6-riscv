@@ -3,7 +3,7 @@
 */*.d
 */*.o
 */*.out
-*/*.S
+user/usys.S
 */*.sym
 fs.img
 kernel/kernel
