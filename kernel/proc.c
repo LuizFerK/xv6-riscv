@@ -12,6 +12,12 @@ struct proc proc[NPROC];
 
 struct proc *initproc;
 
+// Priority class queues
+struct proc *class0_proc_queue[NPROC];
+struct proc *class1_proc_queue[NPROC];
+struct proc *class2_proc_queue[NPROC];
+struct proc *class3_proc_queue[NPROC];
+
 int nextpid = 1;
 struct spinlock pid_lock;
 
@@ -25,6 +31,43 @@ extern char trampoline[]; // trampoline.S
 // memory model when using p->parent.
 // must be acquired before any p->lock.
 struct spinlock wait_lock;
+
+// Add a process to the end of the specified queue
+void
+enqueue_proc(struct proc **queue, struct proc *p)
+{
+  int i;
+  
+  // Find first empty slot
+  for(i = 0; i < NPROC; i++) {
+    if(queue[i] == 0) {
+      queue[i] = p;
+      break;
+    }
+  }
+}
+
+// Remove and return the first process from the specified queue
+struct proc*
+dequeue_proc(struct proc **queue) 
+{
+  struct proc *p;
+  int i;
+
+  // Get first process
+  p = queue[0];
+  if(p == 0) {
+    return 0;
+  }
+
+  // Shift remaining processes forward
+  for(i = 0; i < NPROC-1; i++) {
+    queue[i] = queue[i+1];
+  }
+  queue[NPROC-1] = 0;
+
+  return p;
+}
 
 // Allocate a page for each process's kernel stack.
 // Map it high in memory, followed by an invalid
@@ -250,6 +293,7 @@ userinit(void)
   p->cwd = namei("/");
 
   p->state = RUNNABLE;
+  enqueue_proc(class0_proc_queue, p);
 
   release(&p->lock);
 }
@@ -321,6 +365,7 @@ fork(int priority_class)
 
   acquire(&np->lock);
   np->state = RUNNABLE;
+  enqueue_proc(class0_proc_queue, np);
   release(&np->lock);
 
   return pid;
@@ -435,6 +480,30 @@ wait(uint64 addr)
   }
 }
 
+// Generate a random number between 0 and max (exclusive)
+int
+random_at_most(int max) {
+  static unsigned long seed = 1;
+  seed = seed * 1664525 + 1013904223;
+  return (int)((seed >> 16) % max);
+}
+
+// Get a priority class by ticket
+struct proc**
+priority_queue_by_ticket(int ticket) {
+  if (ticket < 6) {
+    return class0_proc_queue;
+  } else if (ticket < 9) {
+    return class1_proc_queue;
+  } else if (ticket < 11) {
+    return class2_proc_queue;
+  } else if (ticket < 12) {
+    return class3_proc_queue;
+  } else {
+    return 0;
+  }
+}
+
 // Per-CPU process scheduler.
 // Each CPU calls scheduler() after setting itself up.
 // Scheduler never returns.  It loops, doing:
@@ -448,6 +517,13 @@ scheduler(void)
   struct proc *p;
   struct cpu *c = mycpu();
 
+  // Total tickets
+  // 6 for class 0
+  // 3 for class 1
+  // 2 for class 2
+  // 1 for class 3
+  int tickets = 6 + 3 + 2 + 1;
+
   c->proc = 0;
   for(;;){
     // The most recent process to run may have had interrupts
@@ -455,25 +531,24 @@ scheduler(void)
     // processes are waiting.
     intr_on();
 
-    int found = 0;
-    for(p = proc; p < &proc[NPROC]; p++) {
-      acquire(&p->lock);
-      if(p->state == RUNNABLE) {
-        // Switch to chosen process.  It is the process's job
-        // to release its lock and then reacquire it
-        // before jumping back to us.
-        p->state = RUNNING;
-        c->proc = p;
-        swtch(&c->context, &p->context);
+    int ticket = random_at_most(tickets);
+    struct proc **priority_queue = priority_queue_by_ticket(ticket);
+    p = dequeue_proc(priority_queue);
 
-        // Process is done running for now.
-        // It should have changed its p->state before coming back.
-        c->proc = 0;
-        found = 1;
-      }
+    if(p != 0) {
+      acquire(&p->lock);
+      // Switch to chosen process. It is the process's job
+      // to release its lock and then reacquire it
+      // before jumping back to us.
+      p->state = RUNNING;
+      c->proc = p;
+      swtch(&c->context, &p->context);
+
+      // Process is done running for now.
+      // It should have changed its p->state before coming back.
+      c->proc = 0;
       release(&p->lock);
-    }
-    if(found == 0) {
+    } else {
       // nothing to run; stop running on this core until an interrupt.
       intr_on();
       asm volatile("wfi");
@@ -515,6 +590,7 @@ yield(void)
   struct proc *p = myproc();
   acquire(&p->lock);
   p->state = RUNNABLE;
+  enqueue_proc(class0_proc_queue, p);
   sched();
   release(&p->lock);
 }
@@ -586,6 +662,7 @@ wakeup(void *chan)
       acquire(&p->lock);
       if(p->state == SLEEPING && p->chan == chan) {
         p->state = RUNNABLE;
+        enqueue_proc(class0_proc_queue, p);
       }
       release(&p->lock);
     }
@@ -607,6 +684,7 @@ kill(int pid)
       if(p->state == SLEEPING){
         // Wake process from sleep().
         p->state = RUNNABLE;
+        enqueue_proc(class0_proc_queue, p);
       }
       release(&p->lock);
       return 0;
