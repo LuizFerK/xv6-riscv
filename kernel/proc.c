@@ -32,11 +32,44 @@ extern char trampoline[]; // trampoline.S
 // must be acquired before any p->lock.
 struct spinlock wait_lock;
 
+// Get a priority queue by ticket
+struct proc**
+priority_queue_by_ticket(int ticket) {
+  if (ticket < 6) {
+    return class0_proc_queue;
+  } else if (ticket < 9) {
+    return class1_proc_queue;
+  } else if (ticket < 11) {
+    return class2_proc_queue;
+  } else if (ticket < 12) {
+    return class3_proc_queue;
+  } else {
+    return 0;
+  }
+}
+
+// Get a priority queue by class
+struct proc**
+priority_queue_by_class(int class) {
+  if (class == 0) {
+    return class0_proc_queue;
+  } else if (class == 1) {
+    return class1_proc_queue;
+  } else if (class == 2) {
+    return class2_proc_queue;
+  } else if (class == 3) {
+    return class3_proc_queue;
+  } else {
+    return 0;
+  }
+}
+
 // Add a process to the end of the specified queue
 void
-enqueue_proc(struct proc **queue, struct proc *p)
+enqueue_proc(struct proc *p)
 {
   int i;
+  struct proc **queue = priority_queue_by_class(p->priority_class);
   
   // Find first empty slot
   for(i = 0; i < NPROC; i++) {
@@ -293,7 +326,7 @@ userinit(void)
   p->cwd = namei("/");
 
   p->state = RUNNABLE;
-  enqueue_proc(class0_proc_queue, p);
+  enqueue_proc(p);
 
   release(&p->lock);
 }
@@ -365,7 +398,7 @@ fork(int priority_class)
 
   acquire(&np->lock);
   np->state = RUNNABLE;
-  enqueue_proc(class0_proc_queue, np);
+  enqueue_proc(np);
   release(&np->lock);
 
   return pid;
@@ -488,22 +521,6 @@ random_at_most(int max) {
   return (int)((seed >> 16) % max);
 }
 
-// Get a priority class by ticket
-struct proc**
-priority_queue_by_ticket(int ticket) {
-  if (ticket < 6) {
-    return class0_proc_queue;
-  } else if (ticket < 9) {
-    return class1_proc_queue;
-  } else if (ticket < 11) {
-    return class2_proc_queue;
-  } else if (ticket < 12) {
-    return class3_proc_queue;
-  } else {
-    return 0;
-  }
-}
-
 // Per-CPU process scheduler.
 // Each CPU calls scheduler() after setting itself up.
 // Scheduler never returns.  It loops, doing:
@@ -590,7 +607,7 @@ yield(void)
   struct proc *p = myproc();
   acquire(&p->lock);
   p->state = RUNNABLE;
-  enqueue_proc(class0_proc_queue, p);
+  enqueue_proc(p);
   sched();
   release(&p->lock);
 }
@@ -662,7 +679,7 @@ wakeup(void *chan)
       acquire(&p->lock);
       if(p->state == SLEEPING && p->chan == chan) {
         p->state = RUNNABLE;
-        enqueue_proc(class0_proc_queue, p);
+        enqueue_proc(p);
       }
       release(&p->lock);
     }
@@ -684,7 +701,7 @@ kill(int pid)
       if(p->state == SLEEPING){
         // Wake process from sleep().
         p->state = RUNNABLE;
-        enqueue_proc(class0_proc_queue, p);
+        enqueue_proc(p);
       }
       release(&p->lock);
       return 0;
