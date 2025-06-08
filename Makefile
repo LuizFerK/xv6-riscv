@@ -12,6 +12,7 @@ OBJS = \
   $K/string.o \
   $K/main.o \
   $K/vm.o \
+  $K/minheap.o \
   $K/proc.o \
   $K/swtch.o \
   $K/trampoline.o \
@@ -138,8 +139,8 @@ UPROGS=\
 	$U/_wc\
 	$U/_zombie\
 
-fs.img: mkfs/mkfs README $(UPROGS)
-	mkfs/mkfs fs.img README $(UPROGS)
+fs.img: mkfs/mkfs $(UPROGS)
+	mkfs/mkfs fs.img $(UPROGS)
 
 -include kernel/*.d user/*.d
 

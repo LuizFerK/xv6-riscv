@@ -15,25 +15,27 @@ void waste_time(){
 int
 main(int argc, char *argv[])
 {
+  int p_tickets;
   int n, pid;
-  int priority[NPROC];
+  int tickets[NPROC];
 
   for(n=0; n<N; n++){
-    pid = fork(n % 4);
+    p_tickets = N * 100 - n * 100;
+    pid = fork(p_tickets);
     if(pid == 0) {
       waste_time();
       exit(0);
     }
     else {
-      printf("started child %d with priority %d\n", pid, n % 4);
+      printf("started child %d with %d tickets\n", pid, p_tickets);
       child[n] = pid;
-      priority[pid] = n % 4;
+      tickets[pid] = p_tickets;
     }
   }
 
   for(n=0; n<N; n++){
     pid = wait(0);
-    printf("Child pid = %d finished with priority %d!\n", pid, priority[pid]);
+    printf("Child pid = %d finished with %d tickets!\n", pid, tickets[pid]);
   }
 
   exit(0);

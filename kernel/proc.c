@@ -5,6 +5,7 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#include "minheap.h"
 
 struct cpu cpus[NCPU];
 
@@ -12,11 +13,11 @@ struct proc proc[NPROC];
 
 struct proc *initproc;
 
-// Priority class queues
-struct proc *class0_proc_queue[NPROC];
-struct proc *class1_proc_queue[NPROC];
-struct proc *class2_proc_queue[NPROC];
-struct proc *class3_proc_queue[NPROC];
+// Stride scheduling constants
+#define STRIDE_LARGE 10000
+
+// Proccess queue
+struct min_heap proc_heap;
 
 int nextpid = 1;
 struct spinlock pid_lock;
@@ -31,76 +32,6 @@ extern char trampoline[]; // trampoline.S
 // memory model when using p->parent.
 // must be acquired before any p->lock.
 struct spinlock wait_lock;
-
-// Get a priority queue by ticket
-struct proc**
-priority_queue_by_ticket(int ticket) {
-  if (ticket < 6) {
-    return class0_proc_queue;
-  } else if (ticket < 9) {
-    return class1_proc_queue;
-  } else if (ticket < 11) {
-    return class2_proc_queue;
-  } else if (ticket < 12) {
-    return class3_proc_queue;
-  } else {
-    return 0;
-  }
-}
-
-// Get a priority queue by class
-struct proc**
-priority_queue_by_class(int class) {
-  if (class == 0) {
-    return class0_proc_queue;
-  } else if (class == 1) {
-    return class1_proc_queue;
-  } else if (class == 2) {
-    return class2_proc_queue;
-  } else if (class == 3) {
-    return class3_proc_queue;
-  } else {
-    return 0;
-  }
-}
-
-// Add a process to the end of the specified queue
-void
-enqueue_proc(struct proc *p)
-{
-  int i;
-  struct proc **queue = priority_queue_by_class(p->priority_class);
-  
-  // Find first empty slot
-  for(i = 0; i < NPROC; i++) {
-    if(queue[i] == 0) {
-      queue[i] = p;
-      break;
-    }
-  }
-}
-
-// Remove and return the first process from the specified queue
-struct proc*
-dequeue_proc(struct proc **queue) 
-{
-  struct proc *p;
-  int i;
-
-  // Get first process
-  p = queue[0];
-  if(p == 0) {
-    return 0;
-  }
-
-  // Shift remaining processes forward
-  for(i = 0; i < NPROC-1; i++) {
-    queue[i] = queue[i+1];
-  }
-  queue[NPROC-1] = 0;
-
-  return p;
-}
 
 // Allocate a page for each process's kernel stack.
 // Map it high in memory, followed by an invalid
@@ -127,6 +58,7 @@ procinit(void)
   
   initlock(&pid_lock, "nextpid");
   initlock(&wait_lock, "wait_lock");
+  heap_init(&proc_heap);
   for(p = proc; p < &proc[NPROC]; p++) {
       initlock(&p->lock, "proc");
       p->state = UNUSED;
@@ -326,7 +258,7 @@ userinit(void)
   p->cwd = namei("/");
 
   p->state = RUNNABLE;
-  enqueue_proc(p);
+  heap_insert(&proc_heap, p);
 
   release(&p->lock);
 }
@@ -354,7 +286,7 @@ growproc(int n)
 // Create a new process, copying the parent.
 // Sets up child kernel stack to return as if from fork() system call.
 int
-fork(int priority_class)
+fork(int tickets)
 {
   int i, pid;
   struct proc *np;
@@ -393,12 +325,14 @@ fork(int priority_class)
 
   acquire(&wait_lock);
   np->parent = p;
-  np->priority_class = priority_class;
+  np->tickets = tickets;
+  np->stride = STRIDE_LARGE / tickets;
+  np->pass = 0;
   release(&wait_lock);
 
   acquire(&np->lock);
   np->state = RUNNABLE;
-  enqueue_proc(np);
+  heap_insert(&proc_heap, np);
   release(&np->lock);
 
   return pid;
@@ -513,14 +447,6 @@ wait(uint64 addr)
   }
 }
 
-// Generate a random number between 0 and max (exclusive)
-int
-random_at_most(int max) {
-  static unsigned long seed = 1;
-  seed = seed * 1664525 + 1013904223;
-  return (int)((seed >> 16) % max);
-}
-
 // Per-CPU process scheduler.
 // Each CPU calls scheduler() after setting itself up.
 // Scheduler never returns.  It loops, doing:
@@ -534,13 +460,6 @@ scheduler(void)
   struct proc *p;
   struct cpu *c = mycpu();
 
-  // Total tickets
-  // 6 for class 0
-  // 3 for class 1
-  // 2 for class 2
-  // 1 for class 3
-  int tickets = 6 + 3 + 2 + 1;
-
   c->proc = 0;
   for(;;){
     // The most recent process to run may have had interrupts
@@ -548,9 +467,7 @@ scheduler(void)
     // processes are waiting.
     intr_on();
 
-    int ticket = random_at_most(tickets);
-    struct proc **priority_queue = priority_queue_by_ticket(ticket);
-    p = dequeue_proc(priority_queue);
+    p = heap_extract_min(&proc_heap);
 
     if(p != 0) {
       acquire(&p->lock);
@@ -558,6 +475,7 @@ scheduler(void)
       // to release its lock and then reacquire it
       // before jumping back to us.
       p->state = RUNNING;
+      p->pass += p->stride;
       c->proc = p;
       swtch(&c->context, &p->context);
 
@@ -607,7 +525,7 @@ yield(void)
   struct proc *p = myproc();
   acquire(&p->lock);
   p->state = RUNNABLE;
-  enqueue_proc(p);
+  heap_insert(&proc_heap, p);
   sched();
   release(&p->lock);
 }
@@ -679,7 +597,7 @@ wakeup(void *chan)
       acquire(&p->lock);
       if(p->state == SLEEPING && p->chan == chan) {
         p->state = RUNNABLE;
-        enqueue_proc(p);
+        heap_insert(&proc_heap, p);
       }
       release(&p->lock);
     }
@@ -701,7 +619,7 @@ kill(int pid)
       if(p->state == SLEEPING){
         // Wake process from sleep().
         p->state = RUNNABLE;
-        enqueue_proc(p);
+        heap_insert(&proc_heap, p);
       }
       release(&p->lock);
       return 0;
