@@ -5,24 +5,22 @@
 
 3. Once the shell initializes, you can run the scheduler test script using the `schedtest` command.
 
-4. The results will be printed to stdout, demonstrating that the process priority classes are supported by the scheduler implementation.
+4. The results will be printed to stdout, demonstrating that the stride scheduling is supported by the scheduler implementation.
 
 ## Fork Changes
-This project is a fork of the xv6-riscv repository to test the implementation of a scheduler based on priority class queues with a round-robin strategy. The main code modifications include:
+This project is a fork of the xv6-riscv repository to test the implementation of a scheduler based on stride scheduling strategy. The main code modifications include:
 
-1. `kernel/proc.h:95` - Added `priority_class` to the process struct
-2. `kernel/proc.c:16` - Added the process priority queues
-3. `kernel/proc.c:36` - Function to get the priority queue based on a ticket
-4. `kernel/proc.c:52` - Function to get the priority queue based on the class
-5. `kernel/proc.c:68` - Function to enqueue processes in their respective queues
-6. `kernel/proc.c:84` - Function to dequeue the first process from the queue
-7. `kernel/proc.c:356` - Refactored the `fork` function to accept the process priority class as a parameter
-8. `kernel/proc.c:517` - Function to generate a random integer from 0 to max (exclusive)
-9. `kernel/proc.c:356` - Refactored the `scheduler` function to draw a random class based on a random ticket and select the first process from the priority queue of the selected class to run
-10. `kernel/proc.c:329/401/610/682/704` - Modified so any process that changes state to "RUNNABLE" gets added to the end of its respective queue
-11. `Makefile:68` - Added flag to remove built-in fork implementation
-12. `user/schedtest.c` - Test script to verify the scheduler algorithm with class drawing and the round-robin strategy
-13. All other xv6 user tests were removed
+1. `kernel/minheap.c` - Added a Min-Heap for the stride scheduler with `heap_init`, `heap_insert` and `heap_extract_min` functions
+2. `kernel/minheap.h` - `minheap.c` header
+3. `kernel/proc.h:95/96/97` - Added `tickets`, `stride` and `pass` to the process struct
+4. `kernel/proc.c:20` - Added the process heap
+5. `kernel/proc.c:61` - Initializes the proccess heap with 0 size
+6. `kernel/proc.c:289` - Refactored the `fork` function to accept the process tickets as a parameter
+7. `kernel/proc.c:470` - Refactored the `scheduler` function to get the runnable proccess with less pass to run
+8. `kernel/proc.c:261/335/528/600/622` - Modified so any process that changes state to "RUNNABLE" gets added to the heap
+9. `Makefile:68` - Added flag to remove built-in fork implementation
+10. `user/schedtest.c` - Test script to verify the scheduler algorithm with stride scheduling strategy
+11. All other xv6 user tests were removed
 
 ## xv6 base README
 
