@@ -1,7 +1,7 @@
 #include "types.h"
 #include "riscv.h"
+#include "defs.h"
 #include "minheap.h"
-#include "spinlock.h"
 #include "proc.h"
 
 static int parent(int i) { return (i-1)/2; }
@@ -16,11 +16,16 @@ static void swap(struct proc **a, struct proc **b) {
 
 void heap_init(struct min_heap *heap) {
   heap->size = 0;
+  initlock(&heap->lock, "minheap");
 }
 
 int heap_insert(struct min_heap *heap, struct proc *p) {
-  if (heap->size >= NPROC)
+  acquire(&heap->lock);
+
+  if (heap->size >= NPROC) {
+    release(&heap->lock);
     return 0;
+  }
   
   heap->data[heap->size] = p;
   int i = heap->size;
@@ -32,12 +37,17 @@ int heap_insert(struct min_heap *heap, struct proc *p) {
     i = parent(i);
   }
 
+  release(&heap->lock);
   return 1;
 }
 
 struct proc* heap_extract_min(struct min_heap *heap) {
-  if (heap->size <= 0)
+  acquire(&heap->lock);
+
+  if (heap->size <= 0) {
+    release(&heap->lock);
     return 0;
+  }
   
   struct proc *root = heap->data[0];
   heap->data[0] = heap->data[heap->size-1];
@@ -61,5 +71,6 @@ struct proc* heap_extract_min(struct min_heap *heap) {
     i = smallest;
   }
   
+  release(&heap->lock);
   return root;
 }

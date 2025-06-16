@@ -18,9 +18,10 @@ This project is a fork of the xv6-riscv repository to test the implementation of
 6. `kernel/proc.c:289` - Refactored the `fork` function to accept the process tickets as a parameter
 7. `kernel/proc.c:470` - Refactored the `scheduler` function to get the runnable proccess with less pass to run
 8. `kernel/proc.c:261/335/528/600/622` - Modified so any process that changes state to "RUNNABLE" gets added to the heap
-9. `Makefile:68` - Added flag to remove built-in fork implementation
-10. `user/schedtest.c` - Test script to verify the scheduler algorithm with stride scheduling strategy
-11. All other xv6 user tests were removed
+9. `kernel/spinlock.h` - Added `ifndef` to prevent struct redefinition
+10. `Makefile:68` - Added flag to remove built-in fork implementation
+11. `user/schedtest.c` - Test script to verify the scheduler algorithm with stride scheduling strategy
+12. All other xv6 user tests were removed
 
 ## xv6 base README
 

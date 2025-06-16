@@ -1,8 +1,10 @@
 #include "param.h"
+#include "spinlock.h"
 
 struct min_heap {
-    struct proc* data[NPROC];
-    int size;
+  struct proc* data[NPROC];
+  struct spinlock lock;
+  int size;
 };
 
 void heap_init(struct min_heap *heap);
